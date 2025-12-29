@@ -43,7 +43,6 @@ class GomokuGame {
     }
     
     init() {
-        this.loadSettings();
         this.initAI();
         this.initBoard();
         this.initCanvas();
@@ -52,23 +51,6 @@ class GomokuGame {
         this.showPage('game');
     }
     
-    /**
-     * 从本地存储加载设置
-     */
-    loadSettings() {
-        const saved = localStorage.getItem('gomoku-settings');
-        if (saved) {
-            this.settings = { ...this.settings, ...JSON.parse(saved) };
-        }
-    }
-    
-    /**
-     * 保存设置到本地存储
-     */
-    saveSettings() {
-        localStorage.setItem('gomoku-settings', JSON.stringify(this.settings));
-        this.initAI(); // 重新初始化AI
-    }
     
     /**
      * 初始化AI
@@ -150,9 +132,6 @@ class GomokuGame {
             }
             
             // 设置相关
-            if (target.matches('#save-settings-btn')) {
-                this.saveSettingsFromUI();
-            }
             if (target.matches('#reset-settings-btn')) {
                 this.resetSettings();
             }
@@ -168,8 +147,13 @@ class GomokuGame {
         
         // 设置页面输入事件
         document.addEventListener('input', (e) => {
-            if (e.target.matches('.setting-input')) {
+            if (e.target.matches('input[type="number"]')) {
                 this.updateSettingFromInput(e.target);
+            }
+            
+            // 处理滑块的实时更新
+            if (e.target.matches('input[type="range"]')) {
+                this.updateSliderValue(e.target);
             }
         });
         
@@ -301,18 +285,29 @@ class GomokuGame {
             const result = this.ai.findBestMove(this.board, this.currentPlayer);
             
             if (result && result.move) {
+                
+                // 记录ai思考日志
+                if (result.logs && Array.isArray(result.logs)) {
+                    result.logs.forEach(innerLog => {
+                        // 直接传入，addLog 会处理剩下的事情
+                        this.addLog({
+                            type: innerLog.type || 'info',
+                            message: innerLog.message
+                        });
+                    });
+                }
+
                 const [row, col] = result.move;
                 this.makeMove(row, col);
-                this.updateGameStats();
                 
-                // 记录日志
+                // 更新落子日志
                 this.addLog({
                     type: 'ai-move',
                     message: `AI落子: (${row}, ${col}), 得分: ${result.score}`,
                     data: result
                 });
                 
-                // 更新日志统计
+                this.updateGameStats();
                 this.updateLogStats();
             }
         } catch (error) {
@@ -653,31 +648,68 @@ class GomokuGame {
      * 从UI更新设置
      */
     updateSettingFromInput(input) {
-        const settingName = input.dataset.setting;
-        const value = parseFloat(input.value);
+        const path = input.dataset.setting; // 例如 "patternWeights.liveFive" 或 "searchDepth"
+        if (!path) return;
+
+        const val = parseFloat(input.value); 
+
+        if (isNaN(val)) return;
         
-        if (settingName.includes('.')) {
-            // 嵌套属性
-            const [parent, child] = settingName.split('.');
-            this.settings[parent][child] = value;
-        } else {
-            this.settings[settingName] = value;
-        }
+        // 处理嵌套对象赋值 (例如 settings.patternWeights.liveFive)
+        const keys = path.split('.');
+        let current = this.settings;
         
-        // 更新显示值
-        const valueDisplay = document.getElementById(input.id.replace('-', '-').replace('search', 'search').replace('candidate', 'candidate').replace('range', 'range') + '-value');
-        if (valueDisplay) {
-            valueDisplay.textContent = value;
+        for (let i = 0; i < keys.length - 1; i++) {
+            current = current[keys[i]];
         }
+        current[keys[keys.length - 1]] = val;
+
+        // 实时重新初始化 AI 权重
+        this.initAI();
+        
+        console.log(`设置已更新: ${path} = ${val}`);
     }
     
     /**
-     * 保存设置
+     * 更新滑块的显示值
      */
-    saveSettingsFromUI() {
-        this.saveSettings();
-        this.showModal('设置已保存！');
+    updateSliderValue(slider) {
+        const value = slider.value;
+        let valueId = '';
+        
+        // 根据滑块ID确定值显示元素的ID
+        switch (slider.id) {
+            case 'search-depth':
+            case 'quick-depth':
+                this.settings.searchDepth = value;
+                valueId = 'depth-value';
+                // 同步两个页面的显示
+                const qdv = document.getElementById('quick-depth-value');
+                if (qdv) qdv.textContent = value;
+                break;
+            case 'candidate-count':
+            case 'quick-candidate':
+                this.settings.candidateCount = value;
+                valueId = 'candidate-value';
+                const qcv = document.getElementById('quick-candidate-value');
+                if (qcv) qcv.textContent = value;
+                break;
+            case 'search-range':
+                this.settings.searchRange = value;
+                valueId = 'range-value';
+                break;
+        }
+        
+        // 2. 更新当前页面的文本显示
+        const valueDisplay = document.getElementById(valueId);
+        if (valueDisplay) {
+            valueDisplay.textContent = value;
+        }
+        
+        // 3. 实时重新初始化AI
+        this.initAI();
     }
+    
     
     /**
      * 重置设置
@@ -700,11 +732,12 @@ class GomokuGame {
         };
         
         this.updateSettingsUI();
+        this.initAI();
         this.showModal('设置已重置为默认值！');
     }
     
     /**
-     * 更新日志页面UI
+     * 更新日志页面UI (黑客帝国/终端风格版)
      */
     updateLogsUI() {
         const logsContainer = document.getElementById('logs-container');
@@ -712,19 +745,23 @@ class GomokuGame {
         
         const logs = this.getLogs();
         if (logs.length === 0) {
-            logsContainer.innerHTML = '<p class="text-gray-500">暂无日志</p>';
+            logsContainer.innerHTML = '暂无日志';
             return;
         }
         
-        logsContainer.innerHTML = logs.map(log => `
-            <div class="log-entry p-3 bg-gray-50 rounded mb-2">
-                <span class="text-sm text-gray-500">[${log.timestamp}]</span>
-                <span class="ml-2">${log.message}</span>
-            </div>
-        `).join('');
+        // 1. 使用 map 构造纯文本行
+        const content = logs.map(log => {
+            return `[${log.timestamp}] ${log.message}`;
+        }).join('\n'); // 用换行符连接
         
-        // 滚动到底部
-        logsContainer.scrollTop = logsContainer.scrollHeight;
+        // 2. 一次性写入
+        logsContainer.innerHTML = content;
+        
+        // 3. 滚动到底部
+        // 使用 requestAnimationFrame 确保在浏览器渲染后再滚动
+        requestAnimationFrame(() => {
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        });
     }
     
     /**
@@ -768,12 +805,16 @@ class GomokuGame {
             ...log
         });
         
-        // 限制日志数量
         if (logs.length > 1000) {
             logs.splice(0, logs.length - 1000);
         }
         
         localStorage.setItem('gomoku-logs', JSON.stringify(logs));
+        
+        // 每当日志增加时，自动调用更新
+        this.updateLogsUI();
+
+        this.updateLogStats();
     }
     
     /**
@@ -790,7 +831,6 @@ class GomokuGame {
     clearLogs() {
         localStorage.removeItem('gomoku-logs');
         this.updateLogsUI();
-        this.showModal('日志已清空！');
     }
     
     /**

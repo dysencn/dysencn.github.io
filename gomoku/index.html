@@ -6,7 +6,7 @@
     <title>五子棋Alpha-Beta算法演示</title>
     
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="tailwindcss.js"></script>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,7 +15,6 @@
     
     <!-- Animation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     
     <!-- Custom Styles -->
     <style>
@@ -133,6 +132,9 @@
             background: url('./resources/wood-texture.png') center/cover;
             border-radius: 12px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            aspect-ratio: 1;
+            max-width: 600px;
+            margin: 0 auto;
         }
         
         .control-panel {
@@ -144,6 +146,41 @@
             width: 40px;
             height: 40px;
             background: url('./resources/algorithm-icon.png') center/contain no-repeat;
+        }
+
+        /* 日志容器的外层，确保它有固定高度或占满空间 */
+        #logs-container {
+            background: #1e1e1e;          /* 深灰黑色背景 */
+            color: #00ff41;               /* 经典的终端绿 */
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; /* 等宽字体 */
+            padding: 15px;
+            width: 100%;
+            max-width: none;             /* 可根据主项目布局调整 */
+            height: 480px;                /* 固定高度，方便出现滚动条 */
+            overflow-y: auto;             /* 内容溢出时显示滚动条 */
+            border-radius: 8px;
+            border: 1px solid #333;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;        /* 保留空格和换行，并自动折行 */
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5); /* 内阴影增加质感 */
+        }
+
+        .logs-time {
+            color: #008f11;                /* 暗绿色 */
+            margin-right: 8px;
+        }
+
+        /* 自定义滚动条样式（让它看起来更现代） */
+        #logs-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #logs-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        #logs-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
         
         /* 响应式设计 */
@@ -167,18 +204,13 @@
     <!-- 主容器 -->
     <div class="min-h-screen pb-20">
         <!-- 头部 -->
-        <header class="bg-gradient-to-r from-gray-800 to-gray-900 py-6 px-4 shadow-lg">
+        <header class="bg-gradient-to-r from-gray-800 to-gray-900 py-4 px-4 shadow-lg">
             <div class="max-w-6xl mx-auto flex items-center justify-between">
                 <div class="flex items-center space-x-4">
                     <div class="algorithm-icon"></div>
                     <div>
                         <h1 class="text-2xl font-bold serif-font text-white">五子棋Alpha-Beta算法演示</h1>
-                        <p class="text-gray-300 text-sm">体验AI博弈树搜索的强大能力</p>
                     </div>
-                </div>
-                <div class="hidden md:block text-right">
-                    <p class="text-sm text-gray-400">当前玩家</p>
-                    <p id="current-player-display" class="text-lg font-semibold text-white">黑子</p>
                 </div>
             </div>
         </header>
@@ -188,15 +220,15 @@
             <div class="max-w-6xl mx-auto p-4">
                 <div class="main-container flex flex-col lg:flex-row gap-6">
                     <!-- 棋盘区域 -->
-                    <div class="flex-1 flex justify-center">
-                        <div class="board-container p-6">
-                            <canvas id="game-canvas" class="max-w-full h-auto"></canvas>
+                    <div class="flex-1 flex justify-center items-center min-h-[70vh]">
+                        <div class="board-container p-6 w-full max-w-2xl">
+                            <canvas id="game-canvas" class="w-full h-auto"></canvas>
                         </div>
                     </div>
                     
                     <!-- 控制面板 -->
                     <div class="lg:w-80">
-                        <div class="control-panel rounded-xl p-6 space-y-6">
+                        <div class="control-panel rounded-xl p-6 space-y-3">
                             <!-- 游戏状态 -->
                             <div class="text-center">
                                 <h3 class="text-lg font-semibold mb-2">游戏状态</h3>
@@ -278,7 +310,7 @@
         <!-- 设置页面 -->
         <div id="settings-page" class="page hidden">
             <div class="max-w-4xl mx-auto p-4">
-                <div class="glass-panel rounded-xl p-8">
+                <div class="glass-panel rounded-xl p-4">
                     <h2 class="text-3xl font-bold serif-font mb-8 text-center">算法参数设置</h2>
                     
                     <div class="grid md:grid-cols-2 gap-8">
@@ -392,9 +424,6 @@
                     
                     <!-- 操作按钮 -->
                     <div class="flex justify-center space-x-4 mt-8">
-                        <button id="save-settings-btn" class="btn-primary px-8 py-3 rounded-lg text-white font-semibold">
-                            💾 保存设置
-                        </button>
                         <button id="reset-settings-btn" class="px-8 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-semibold transition-colors">
                             🔄 重置默认
                         </button>
@@ -436,8 +465,8 @@
                     </div>
                     
                     <!-- 日志内容 -->
-                    <div id="logs-container" class="bg-gray-800 rounded-lg p-4 max-h-96 overflow-y-auto">
-                        <p class="text-gray-500">暂无日志记录</p>
+                    <div id="logs-container">
+                        <p>暂无日志记录</p>
                     </div>
                 </div>
             </div>
